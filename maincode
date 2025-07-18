@@ -1,5 +1,5 @@
 """
-Version 1.6 of Owen Chin Bot – City Priority + Smart Meeples
+Version 1.7 of Owen Chin Bot – City Priority + Completion-Aware Meeples
 """
 
 from helper.game import Game
@@ -70,7 +70,6 @@ def handle_place_tile(
                     tile.rotate_clockwise(1)
                     continue
 
-                # score this placement based on city priority
                 score = 0
                 for edge, st in tile.internal_edges.items():
                     if st == StructureType.CITY:
@@ -122,27 +121,36 @@ def handle_place_meeple(
     def completed(edge: str) -> bool:
         return game.state._check_completed_component(recent, edge)
 
-    # 1️⃣ Uncompleted city
+    def open_connections(tile: Tile, target_edge: str) -> int:
+        count = 0
+        for edge, st in tile.internal_edges.items():
+            if st == tile.internal_edges.get(target_edge):
+                if not completed(edge):
+                    count += 1
+        return count
+
+    # 1. City, if uncompleted and low number of open ends
     for edge, st in placeable.items():
         if st == StructureType.CITY and not completed(edge):
-            return game.move_place_meeple(query, recent._to_model(), edge)
+            if open_connections(recent, edge) <= 3:
+                return game.move_place_meeple(query, recent._to_model(), edge)
 
-    # 2️⃣ Uncompleted road
+    # 2. Road, same condition
     for edge, st in placeable.items():
         if st in (StructureType.ROAD, StructureType.ROAD_START) and not completed(edge):
-            return game.move_place_meeple(query, recent._to_model(), edge)
+            if open_connections(recent, edge) <= 2:
+                return game.move_place_meeple(query, recent._to_model(), edge)
 
-    # 3️⃣ Uncompleted monastery
+    # 3. Monastery
     if MONASTARY_IDENTIFIER in placeable and not completed(MONASTARY_IDENTIFIER):
         return game.move_place_meeple(query, recent._to_model(), MONASTARY_IDENTIFIER)
 
-    # 4️⃣ Endgame farming (if ≤10 tiles left)
+    # 4. Late game farming
     if len(game.state.map.available_tiles) <= 10:
         for edge, st in placeable.items():
             if st == StructureType.FIELD:
                 return game.move_place_meeple(query, recent._to_model(), edge)
 
-    # 5️⃣ Otherwise, pass
     return game.move_place_meeple_pass(query)
 
 
